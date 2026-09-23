@@ -1,0 +1,270 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smart-campus
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: documents-pvc
+  namespace: smart-campus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: student-portal
+  namespace: smart-campus
+  labels:
+    app: student-portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: student-portal
+  template:
+    metadata:
+      labels:
+        app: student-portal
+    spec:
+      containers:
+        - name: portal
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-portal
+  namespace: smart-campus
+spec:
+  selector:
+    app: student-portal
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attendance-api
+  namespace: smart-campus
+  labels:
+    app: attendance-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attendance-api
+  template:
+    metadata:
+      labels:
+        app: attendance-api
+    spec:
+      containers:
+        - name: api
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - mkdir -p /www;
+              echo attendance-api > /www/index.html;
+              httpd -f -p 8080 -h /www
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendance-api
+  namespace: smart-campus
+spec:
+  selector:
+    app: attendance-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: library-upload
+  namespace: smart-campus
+  labels:
+    app: library-upload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: library-upload
+  template:
+    metadata:
+      labels:
+        app: library-upload
+    spec:
+      containers:
+        - name: uploader
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - while true;
+              do date >> /data/uploads.log;
+              dd if=/dev/zero of=/data/chunk-$(date +%s).bin bs=256K count=4 2>/dev/null;
+              sleep 10;
+              done
+          volumeMounts:
+            - name: documents
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 400m
+              memory: 256Mi
+      volumes:
+        - name: documents
+          persistentVolumeClaim:
+            claimName: documents-pvc
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: document-store
+  namespace: smart-campus
+  labels:
+    app: document-store
+spec:
+  serviceName: document-store
+  replicas: 1
+  selector:
+    matchLabels:
+      app: document-store
+  template:
+    metadata:
+      labels:
+        app: document-store
+    spec:
+      containers:
+        - name: store
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - while true;
+              do find /data -maxdepth 1 -type f | wc -l;
+              sleep 15;
+              done
+          volumeMounts:
+            - name: documents
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 40m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+      volumes:
+        - name: documents
+          persistentVolumeClaim:
+            claimName: documents-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-store
+  namespace: smart-campus
+spec:
+  selector:
+    app: document-store
+  ports:
+    - port: 9000
+      targetPort: 9000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transport-gateway
+  namespace: smart-campus
+  labels:
+    app: transport-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transport-gateway
+  template:
+    metadata:
+      labels:
+        app: transport-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - mkdir -p /www;
+              echo transport-gateway > /www/index.html;
+              httpd -f -p 8080 -h /www
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 40m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-worker
+  namespace: smart-campus
+  labels:
+    app: notification-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-worker
+  template:
+    metadata:
+      labels:
+        app: notification-worker
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - while true;
+              do echo "dispatching campus event";
+              sleep 8;
+              done
+          resources:
+            requests:
+              cpu: 40m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi

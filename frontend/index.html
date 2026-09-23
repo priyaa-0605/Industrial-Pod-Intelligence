@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PodMind AI — Kubernetes Pod Intelligence</title>
+    <meta name="description" content="AI-powered multi-agent observability platform for real-time Kubernetes pod resource discovery, dependency mapping, and autonomous optimization.">
+    <meta property="og:title" content="PodMind AI">
+    <meta property="og:description" content="AI agents for real-time Kubernetes pod resource discovery and autonomous optimization.">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">PodMind</p>
+          <h1>Industrial Pod Intelligence</h1>
+        </div>
+        <div class="toolbar" aria-label="Dashboard controls">
+          <label class="switch" title="Toggle live stream">
+            <input id="liveToggle" type="checkbox" checked>
+            <span class="switch-track"></span>
+            <span class="switch-label">Live</span>
+          </label>
+          <label class="select-wrap">
+            <span>Namespace</span>
+            <select id="namespaceFilter">
+              <option value="all">All</option>
+            </select>
+          </label>
+          <button id="refreshButton" class="icon-button" type="button" title="Refresh snapshot" aria-label="Refresh snapshot">
+            <span aria-hidden="true">R</span>
+          </button>
+          <button id="themeToggle" class="theme-toggle" type="button" title="Toggle dark mode" aria-label="Toggle theme">
+            <span id="themeIcon" aria-hidden="true">🌙</span>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <nav class="view-nav" aria-label="Operational views">
+          <a href="#command">Command</a>
+          <a href="#discovery">Discovery</a>
+          <a href="#agents">Agents</a>
+          <a href="#topology">Topology</a>
+          <a href="#heatmap">Heatmap</a>
+          <a href="#forecast">Forecast</a>
+          <a href="#chat">Chat AI</a>
+          <a href="#abb-fit">Focus fit</a>
+        </nav>
+
+        <section class="status-strip" aria-label="Cluster status">
+          <div>
+            <span class="muted">Cluster</span>
+            <strong id="clusterName">single-node-lab</strong>
+          </div>
+          <div>
+            <span class="muted">Mode</span>
+            <strong id="clusterMode">starting</strong>
+          </div>
+          <div>
+            <span class="muted">Scenario</span>
+            <strong id="scenarioName">normal</strong>
+          </div>
+          <div>
+            <span class="muted">Updated</span>
+            <strong id="updatedAt">--</strong>
+          </div>
+          <div>
+            <span class="muted">Readiness</span>
+            <strong id="readinessScore">--</strong>
+          </div>
+        </section>
+
+        <section class="scenario-bar" aria-label="Demo scenarios">
+          <button class="scenario-button is-active" type="button" data-scenario="normal">Normal</button>
+          <button class="scenario-button" type="button" data-scenario="cpu_spike">CPU spike</button>
+          <button class="scenario-button" type="button" data-scenario="pvc_stress">PVC stress</button>
+          <button class="scenario-button" type="button" data-scenario="memory_leak">Memory leak</button>
+          <button class="scenario-button" type="button" data-scenario="network_fanout">Network fan-out</button>
+          <button class="scenario-button" type="button" data-scenario="restart_loop">Restart loop</button>
+        </section>
+
+        <section id="focusAreas" class="focus-band" aria-label="Focus areas"></section>
+
+        <section class="kpi-grid" aria-label="Resource totals">
+          <article class="kpi">
+            <span>Pods</span>
+            <strong id="kpiPods">0</strong>
+          </article>
+          <article class="kpi">
+            <span>CPU</span>
+            <strong id="kpiCpu">0m</strong>
+          </article>
+          <article class="kpi">
+            <span>Memory</span>
+            <strong id="kpiMemory">0 MiB</strong>
+          </article>
+          <article class="kpi">
+            <span>Disk</span>
+            <strong id="kpiDisk">0 MiB</strong>
+          </article>
+          <article class="kpi">
+            <span>PVC read</span>
+            <strong id="kpiPvcRead">0 MiB/s</strong>
+          </article>
+          <article class="kpi">
+            <span>PVC write</span>
+            <strong id="kpiPvc">0 MiB/s</strong>
+          </article>
+          <article class="kpi">
+            <span>Network tx</span>
+            <strong id="kpiNetwork">0 KiB/s</strong>
+          </article>
+          <article class="kpi risk-kpi">
+            <span>At risk</span>
+            <strong id="kpiRisk">0</strong>
+          </article>
+        </section>
+
+        <section id="heatmap" class="heatmap-section">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Infrastructure</span>
+                <h2>Resource heatmap</h2>
+              </div>
+              <span id="heatmapCount" class="chip">0 pods</span>
+            </div>
+            <div id="heatmapGrid" class="heatmap-grid"></div>
+          </article>
+        </section>
+
+        <section id="command" class="primary-grid">
+          <article class="panel chart-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Resources</span>
+                <h2>Cluster pulse</h2>
+              </div>
+              <span id="forecastChip" class="chip">stable</span>
+            </div>
+            <canvas id="resourceChart" height="260" aria-label="CPU memory PVC and network chart"></canvas>
+          </article>
+
+          <article id="topology" class="panel graph-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Dependencies</span>
+                <h2>Service map</h2>
+              </div>
+              <span id="edgeCount" class="chip">0 links</span>
+            </div>
+            <svg id="dependencyGraph" viewBox="0 0 760 420" role="img" aria-label="Service dependency graph"></svg>
+          </article>
+
+          <article id="agents" class="panel insight-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Agents</span>
+                <h2>AI findings</h2>
+              </div>
+              <span id="agentCount" class="chip">0</span>
+            </div>
+            <p id="nlpInsight" class="nlp-box">Waiting for pod signals.</p>
+            <div id="agentList" class="agent-list"></div>
+          </article>
+        </section>
+
+        <section id="forecast" class="enterprise-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Forecasting</span>
+                <h2>Risk horizon</h2>
+              </div>
+              <span id="forecastConfidence" class="chip">0%</span>
+            </div>
+            <div id="forecastList" class="metric-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Alerts</span>
+                <h2>Action queue</h2>
+              </div>
+              <span id="alertCount" class="chip">0 open</span>
+            </div>
+            <div id="alertList" class="alert-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Sustainability</span>
+                <h2>Right-sizing</h2>
+              </div>
+              <span id="sustainabilityChip" class="chip">edge estimate</span>
+            </div>
+            <div id="sustainabilityPanel" class="metric-list"></div>
+          </article>
+        </section>
+
+        <section class="secondary-grid">
+          <article class="panel table-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Pods</span>
+                <h2>Resource table</h2>
+              </div>
+              <label class="search-wrap">
+                <span>Search</span>
+                <input id="podSearch" type="search" placeholder="pod or service">
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pod</th>
+                    <th>Namespace</th>
+                    <th>CPU</th>
+                    <th>Memory</th>
+                    <th>PVC write</th>
+                    <th>Net tx</th>
+                    <th>Restarts</th>
+                    <th>Risk</th>
+                  </tr>
+                </thead>
+                <tbody id="podRows"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel timeline-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Anomalies</span>
+                <h2>Timeline</h2>
+              </div>
+              <span id="anomalyCount" class="chip">0 active</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+          </article>
+
+          <article class="panel recommendation-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Actions</span>
+                <h2>Recommendations</h2>
+              </div>
+            </div>
+            <ol id="recommendationList" class="recommendations"></ol>
+            <div id="correlationList" class="correlations"></div>
+          </article>
+        </section>
+
+        <section id="discovery" class="panel discovery-panel">
+          <div class="panel-header">
+            <div>
+              <span class="panel-kicker">Realtime Discovery</span>
+              <h2>All namespace resource matrix</h2>
+            </div>
+            <span id="discoveryCount" class="chip">0 pods</span>
+          </div>
+          <div class="table-wrap">
+            <table class="wide-table">
+              <thead>
+                <tr>
+                  <th>Pod</th>
+                  <th>Namespace</th>
+                  <th>CPU</th>
+                  <th>RAM</th>
+                  <th>Disk</th>
+                  <th>PVC R/W</th>
+                  <th>Network R/T</th>
+                  <th>Logs</th>
+                  <th>Latency</th>
+                  <th>Signals</th>
+                </tr>
+              </thead>
+              <tbody id="discoveryRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="chat" class="chat-section">
+          <article class="panel chat-panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Conversational AI</span>
+                <h2>Ask PodMind</h2>
+              </div>
+            </div>
+            <div id="chatMessages" class="chat-messages">
+              <div class="chat-msg ai">Hello! I'm PodMind AI. Ask me anything about your cluster — pods, dependencies, anomalies, or forecasts.</div>
+            </div>
+            <div class="chat-input-bar">
+              <input id="chatInput" type="text" placeholder="Ask about your cluster..." autocomplete="off">
+              <button id="chatSend" type="button">➤</button>
+            </div>
+            <div class="chat-suggestions">
+              <button class="chat-chip" type="button" data-query="Show top memory consumers">Top memory</button>
+              <button class="chat-chip" type="button" data-query="Why did pods restart?">Restarts</button>
+              <button class="chat-chip" type="button" data-query="Show anomalies">Anomalies</button>
+              <button class="chat-chip" type="button" data-query="Predict storage exhaustion">Forecast</button>
+              <button class="chat-chip" type="button" data-query="Cluster health overview">Health</button>
+              <button class="chat-chip" type="button" data-query="What should I optimize?">Optimize</button>
+            </div>
+          </article>
+        </section>
+
+        <section id="abb-fit" class="coverage-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Requirements</span>
+                <h2>Capability coverage</h2>
+              </div>
+            </div>
+            <div id="coverageList" class="coverage-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Focus Areas</span>
+                <h2>Focus mapping</h2>
+              </div>
+            </div>
+            <div id="focusDetailList" class="coverage-list"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Deployment</span>
+                <h2>Readiness gates</h2>
+              </div>
+              <span id="readinessLabel" class="chip">prototype</span>
+            </div>
+            <div id="readinessGates" class="coverage-list"></div>
+          </article>
+        </section>
+
+        <section class="enterprise-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <span class="panel-kicker">Success Metrics</span>
+                <h2>Operational KPIs</h2>
+              </div>
+            </div>
+            <div id="successMetrics" class="metrics-kpi-grid"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>
